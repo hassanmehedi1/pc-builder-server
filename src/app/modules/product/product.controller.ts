@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Document } from "mongoose";
+import mongoose, { Document } from "mongoose";
 import { RequestHandler } from "express-serve-static-core";
 import httpStatus from "http-status";
 import catchAsync from "../../../shared/catchAsync";
@@ -13,6 +13,7 @@ import {
 } from "./product.constant";
 import { paginationFields } from "../../../constants/pagination";
 import { IProduct, IReview } from "./product.interface";
+import Product from "./product.model";
 
 // create a new product
 const createProduct: RequestHandler = catchAsync(
@@ -104,9 +105,24 @@ const addProductReview: RequestHandler = catchAsync(
   }
 );
 
+// Create a new collection and copy the data from the Product collection
+const copyProductToMypc: RequestHandler = catchAsync(async (req, res) => {
+  const { id } = req.body;
+
+  // Call the service function to copy the product to 'mypc' collection
+  await productService.copyProductToMypc(id);
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Product data copied to "mypc" collection successfully!',
+  });
+});
+
 export const ProductController = {
   createProduct,
   getProducts,
   getSingleProduct,
   addProductReview,
+  copyProductToMypc,
 };

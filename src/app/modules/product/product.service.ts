@@ -1,45 +1,197 @@
-import { Schema, model } from "mongoose";
-import { IProduct } from "./product.interface";
-import { categoriesArray, status } from "./product.constant";
+import ApiError from "../../../errors/ApiError";
+import mongoose, { Document, Types } from "mongoose";
+import {
+  IPriceFilters,
+  IProduct,
+  IProductFilter,
+  IReview,
+} from "./product.interface";
+import httpStatus from "http-status";
+import { IPaginationOptions } from "../../../interfaces/paginations";
+import { IGenericResponse } from "../../../interfaces/common";
+import { paginationHelper } from "../../../helpers/paginationHelper";
+import { SortOrder } from "mongoose";
+import Product from "./product.model";
+import { productSearchableFields } from "./product.constant";
 
-// Creating a product schema
-const productSchema = new Schema<IProduct>(
-  {
-    name: { type: String, required: true },
-    category: {
-      type: String,
-      enum: categoriesArray,
-      required: true,
-    },
-    image: { type: String, required: true },
-    price: { type: Number, required: true },
-    status: { type: String, enum: status, required: true },
-    description: { type: String, required: true },
-    keyFeatures: {
-      type: {
-        Brand: { type: String, required: true },
-        Model: { type: String, required: true },
-        Specification: { type: String, required: true },
-        Port: { type: Number, required: true },
-        Type: { type: String, required: true },
-        Resolution: { type: String, required: true },
-        Voltage: { type: String, required: true },
-      },
-      required: true,
-    },
-    individualRating: { type: Number },
-    averageRating: { type: Number },
-    reviews: [
-      {
-        name: { type: String, required: true },
-        individualRating: { type: Number, required: true },
-        comment: { type: String, required: true },
-        date: { type: String, required: true },
-      },
-    ],
-  },
-  { timestamps: true }
-);
+const createProduct = async (payload: IProduct): Promise<IProduct> => {
+  try {
+    // check duplicates entries
+    const existingProduct = await Product.findOne(payload);
+    if (existingProduct) {
+      throw new ApiError(httpStatus.BAD_REQUEST, "Product already exists");
+    }
+    const createProduct = await Product.create(payload);
+    return createProduct;
+  } catch (error) {
+    throw error;
+  }
+};
 
-const Product = model<IProduct>("products", productSchema);
-export default Product;
+// get all Product
+const getProducts = async (
+  filters: IProductFilter,
+  paginationOptions: IPaginationOptions,
+  priceQuery: IPriceFilters
+): Promise<IGenericResponse<IProduct[]>> => {
+  const { searchTerm, ...filtersData } = filters;
+  // shortCut way
+  const andConditions = [];
+
+  // price filter
+  if (priceQuery.minPrice !== undefined && priceQuery.maxPrice !== undefined) {
+    const minPrice = Number(priceQuery.minPrice);
+    const maxPrice = Number(priceQuery.maxPrice);
+
+    if (!isNaN(minPrice) && !isNaN(maxPrice)) {
+      andConditions.push({
+        price: {
+          $gte: minPrice,
+          $lte: maxPrice,
+        },
+      });
+    }
+  } else if (priceQuery.minPrice !== undefined) {
+    const minPrice = Number(priceQuery.minPrice);
+
+    if (!isNaN(minPrice)) {
+      andConditions.push({
+        price: { $gte: minPrice },
+      });
+    }
+  } else if (priceQuery.maxPrice !== undefined) {
+    const maxPrice = Number(priceQuery.maxPrice);
+
+    if (!isNaN(maxPrice)) {
+      andConditions.push({
+        price: { $lte: maxPrice },
+      });
+    }
+  }
+  // search term
+  if (searchTerm)
+    andConditions.push({
+      $or: productSearchableFields.map((field) => ({
+        [field]: {
+          $regex: searchTerm,
+          $options: "i",
+        },
+      })),
+    });
+
+  // exact filter
+  if (Object.keys(filtersData).length) {
+    andConditions.push({
+      $and: Object.entries(filtersData).map(([field, value]) => ({
+        [field]: {
+          $regex: new RegExp(`\\b${value}\\b`, "i"),
+        },
+      })),
+    });
+  }
+
+  const { page, limit, skip, sortBy, sortOrder } =
+    paginationHelper.calculatePagination(paginationOptions);
+
+  const sortConditions: { [key: string]: SortOrder } = {};
+
+  if (sortBy && sortOrder) {
+    sortConditions[sortBy] = sortOrder;
+  }
+
+  const whereConditions =
+    andConditions.length > 0 ? { $and: andConditions } : {};
+
+  const result = await Product.find(whereConditions)
+    .sort(sortConditions)
+    .skip(skip)
+    .limit(limit);
+
+  const total = await Product.countDocuments();
+
+  return {
+    meta: {
+      page,
+      limit,
+      total,
+    },
+    data: result,
+  };
+};
+
+// get single user
+const getSingleProduct = async (
+  productId: string
+): Promise<IProduct | null> => {
+  try {
+    const product = await Product.findById(productId);
+    return product;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Add product review
+const addProductReview = async (
+  productId: string,
+  review: IReview
+): Promise<void> => {
+  try {
+    const product = await Product.findById(productId).lean().exec();
+
+    if (!product) {
+      throw new ApiError(httpStatus.NOT_FOUND, "Product not found");
+    }
+
+    // Make sure product.reviews is defined before pushing the new review
+    if (!product.reviews) {
+      product.reviews = [];
+    }
+
+    // Add the review to the product's reviews array
+    review.date = new Date();
+    product.reviews.push(review);
+
+    // Save the updated product with the new review
+    await Product.findByIdAndUpdate(productId, {
+      reviews: product.reviews,
+    }).exec();
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Check if the provided ID exists in the Product collection
+const checkProductExists = async (productId: string): Promise<boolean> => {
+  try {
+    const product = await Product.findById(productId);
+    return !!product; // Return true if the product is found, false otherwise
+  } catch (error) {
+    throw error;
+  }
+};
+
+const copyProductToMypc = async (productId: string): Promise<void> => {
+  try {
+    // Check if the product exists in the Product collection
+    const product = await Product.findById(productId);
+    if (!product) {
+      throw new Error("Product not found");
+    }
+
+    // Create a new collection 'mypc' and save the product data in it
+    const Mypc = mongoose.model("Mypc", Product.schema);
+    await Mypc.create(product.toObject());
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const productService = {
+  createProduct,
+  getProducts,
+  getSingleProduct,
+  addProductReview,
+  checkProductExists,
+  copyProductToMypc,
+};

@@ -1,20 +1,4 @@
-// export type IUserFilters = {
-//   searchTerm?: string
-// }
-// export type IUser = {
-//   name: string
-//   password: string
-//   price: number
-// }
-
 import { Model } from "mongoose";
-
-// export type IPriceFilters = {
-//   maxPrice?: number
-//   minPrice?: number
-// }
-
-// ----------------------------------------
 
 export type IPriceFilters = {
   maxPrice?: number;
@@ -32,6 +16,9 @@ export type IProduct = {
   individualRating?: number;
   averageRating?: number;
   reviews?: IReview[];
+  _id?: string;
+  data?: Date;
+  userEmail?: string;
 };
 
 export type IProductFilter = {
@@ -78,6 +65,7 @@ export type IReview = {
   name: string;
   individualRating: number;
   comment: string;
+  date?: Date;
 };
 
 export type ProductModel = Model<IProduct, Record<string, unknown>>;
