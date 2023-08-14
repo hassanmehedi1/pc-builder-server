@@ -1,6 +1,6 @@
-import { Schema, model } from 'mongoose'
-import { IProduct } from './product.interface'
-import { categoriesArray, status } from './product.constant'
+import { Schema, model } from "mongoose";
+import { IProduct } from "./product.interface";
+import { categoriesArray, status } from "./product.constant";
 
 // Creating a product schema
 const productSchema = new Schema<IProduct>(
@@ -27,8 +27,8 @@ const productSchema = new Schema<IProduct>(
       },
       required: true,
     },
-    individualRating: { type: Number, required: true },
-    averageRating: { type: Number, required: true },
+    individualRating: { type: Number },
+    averageRating: { type: Number },
     reviews: [
       {
         name: { type: String, required: true },
@@ -39,7 +39,7 @@ const productSchema = new Schema<IProduct>(
     ],
   },
   { timestamps: true }
-)
+);
 
-const Product = model<IProduct>('products', productSchema)
-export default Product
+const Product = model<IProduct>("products", productSchema);
+export default Product;
